@@ -6,39 +6,117 @@
     android:fitsSystemWindows="true"
     android:orientation="vertical">
 
-    <TextView
+    <!-- Top bar: red status dot and the dot-matrix title -->
+    <LinearLayout
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:letterSpacing="0.3"
-        android:paddingBottom="8dp"
-        android:paddingStart="20dp"
-        android:paddingTop="12dp"
-        android:text="LUT CAM"
-        android:textColor="#FFFFFF"
-        android:textSize="14sp"
-        android:typeface="monospace" />
+        android:layout_height="52dp"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingEnd="20dp"
+        android:paddingStart="20dp">
 
-    <androidx.camera.view.PreviewView
-        android:id="@+id/previewView"
+        <View
+            android:id="@+id/statusDot"
+            android:layout_width="8dp"
+            android:layout_height="8dp"
+            android:layout_marginEnd="12dp"
+            android:alpha="0.4"
+            android:background="@drawable/red_dot" />
+
+        <com.example.lutcam.DotTextView
+            android:id="@+id/titleText"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content" />
+    </LinearLayout>
+
+    <!-- Viewfinder area: the rounded 3:4 viewfinder sits in the middle of it -->
+    <FrameLayout
         android:layout_width="match_parent"
         android:layout_height="0dp"
-        android:layout_weight="1" />
+        android:layout_weight="1">
 
-    <TextView
-        android:id="@+id/statusText"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:gravity="center"
-        android:letterSpacing="0.2"
-        android:paddingBottom="6dp"
-        android:paddingTop="10dp"
-        android:textColor="#9A9A9A"
-        android:textSize="12sp"
-        android:typeface="monospace" />
+        <com.example.lutcam.RatioFrameLayout
+            android:id="@+id/viewfinder"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:layout_gravity="center"
+            android:layout_marginEnd="12dp"
+            android:layout_marginStart="12dp"
+            android:background="#0E0E0E">
 
+            <androidx.camera.view.PreviewView
+                android:id="@+id/previewView"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent" />
+
+            <View
+                android:id="@+id/flashView"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:alpha="0"
+                android:background="#FFFFFF" />
+
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="110dp"
+                android:layout_gravity="bottom"
+                android:background="@drawable/scrim" />
+
+            <com.example.lutcam.ReticleView
+                android:id="@+id/reticle"
+                android:layout_width="72dp"
+                android:layout_height="72dp"
+                android:alpha="0" />
+
+            <com.example.lutcam.DotTextView
+                android:id="@+id/styleLabel"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="bottom|start"
+                android:layout_marginBottom="18dp"
+                android:layout_marginStart="18dp" />
+
+            <com.example.lutcam.DotTextView
+                android:id="@+id/statusLabel"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="top|start"
+                android:layout_marginStart="18dp"
+                android:layout_marginTop="22dp" />
+
+            <LinearLayout
+                android:id="@+id/modePill"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="top|end"
+                android:layout_marginEnd="14dp"
+                android:layout_marginTop="14dp"
+                android:background="@drawable/pill"
+                android:clickable="true"
+                android:contentDescription="Capture mode"
+                android:focusable="true"
+                android:gravity="center"
+                android:orientation="horizontal"
+                android:paddingBottom="8dp"
+                android:paddingEnd="14dp"
+                android:paddingStart="14dp"
+                android:paddingTop="8dp">
+
+                <com.example.lutcam.DotTextView
+                    android:id="@+id/modeText"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content" />
+            </LinearLayout>
+        </com.example.lutcam.RatioFrameLayout>
+    </FrameLayout>
+
+    <!-- Style carousel -->
     <HorizontalScrollView
+        android:id="@+id/chipScroll"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
+        android:layout_marginTop="10dp"
+        android:overScrollMode="never"
         android:scrollbars="none">
 
         <LinearLayout
@@ -46,33 +124,44 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:orientation="horizontal"
-            android:paddingEnd="16dp"
-            android:paddingStart="16dp" />
+            android:paddingEnd="12dp"
+            android:paddingStart="12dp" />
     </HorizontalScrollView>
 
+    <!-- Bottom controls -->
     <FrameLayout
         android:layout_width="match_parent"
-        android:layout_height="120dp">
+        android:layout_height="124dp">
 
-        <TextView
+        <LinearLayout
             android:id="@+id/importButton"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_gravity="start|center_vertical"
-            android:layout_marginStart="24dp"
-            android:letterSpacing="0.15"
-            android:padding="8dp"
-            android:text="+ LUT"
-            android:textColor="#FFFFFF"
-            android:textSize="14sp"
-            android:typeface="monospace" />
+            android:layout_marginStart="20dp"
+            android:background="@drawable/pill"
+            android:clickable="true"
+            android:contentDescription="Import a LUT"
+            android:focusable="true"
+            android:gravity="center"
+            android:orientation="horizontal"
+            android:paddingBottom="10dp"
+            android:paddingEnd="14dp"
+            android:paddingStart="14dp"
+            android:paddingTop="10dp">
 
-        <View
+            <com.example.lutcam.DotTextView
+                android:id="@+id/importText"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content" />
+        </LinearLayout>
+
+        <com.example.lutcam.ShutterView
             android:id="@+id/shutter"
-            android:layout_width="76dp"
-            android:layout_height="76dp"
+            android:layout_width="84dp"
+            android:layout_height="84dp"
             android:layout_gravity="center"
-            android:background="@drawable/shutter" />
+            android:contentDescription="Take photo" />
     </FrameLayout>
 
 </LinearLayout>
