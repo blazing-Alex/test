@@ -1,5 +1,7 @@
 package com.example.lutcam
 
+import android.graphics.Bitmap
+import android.graphics.Color
 import java.io.InputStream
 
 /**
@@ -40,6 +42,31 @@ class CubeLut(val size: Int, private val data: FloatArray) {
             val c1 = c01 + (c11 - c01) * dg
             out[c] = c0 + (c1 - c0) * db
         }
+    }
+
+    /**
+     * The LUT as one picture, size*size pixels wide and size pixels high:
+     * the blue slices sit side by side, red runs along a slice, green runs down.
+     * The live preview shader reads its colours from this picture.
+     */
+    fun toStrip(): Bitmap {
+        val width = size * size
+        val pixels = IntArray(width * size)
+        for (b in 0 until size) {
+            for (g in 0 until size) {
+                for (r in 0 until size) {
+                    val i = ((b * size + g) * size + r) * 3
+                    pixels[g * width + b * size + r] = Color.rgb(
+                        (data[i].coerceIn(0f, 1f) * 255f + 0.5f).toInt(),
+                        (data[i + 1].coerceIn(0f, 1f) * 255f + 0.5f).toInt(),
+                        (data[i + 2].coerceIn(0f, 1f) * 255f + 0.5f).toInt()
+                    )
+                }
+            }
+        }
+        val bitmap = Bitmap.createBitmap(width, size, Bitmap.Config.ARGB_8888)
+        bitmap.setPixels(pixels, 0, width, 0, 0, width, size)
+        return bitmap
     }
 
     companion object {

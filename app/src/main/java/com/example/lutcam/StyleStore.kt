@@ -5,19 +5,17 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
 
-/** One style template: an optional LUT plus a few simple adjustments. */
+/** One look: a built-in recipe, an imported .cube file, or nothing (Original). */
 data class Style(
     val id: String,
     val name: String,
     val lutFile: String? = null,
+    val look: String? = null,
     val intensity: Float = 1f,
-    val saturation: Float = 1f,
-    val contrast: Float = 1f,
-    val warmth: Float = 0f,
     val builtIn: Boolean = false
 ) {
     val isIdentity: Boolean
-        get() = lutFile == null && saturation == 1f && contrast == 1f && warmth == 0f
+        get() = lutFile == null && look == null
 }
 
 class StyleStore(private val context: Context) {
@@ -27,13 +25,14 @@ class StyleStore(private val context: Context) {
 
     fun lutDir(): File = File(context.filesDir, "luts").also { it.mkdirs() }
 
-    private fun builtIns(): List<Style> = listOf(
-        Style("original", "Original", builtIn = true),
-        Style("mono", "Mono", saturation = 0f, contrast = 1.15f, builtIn = true),
-        Style("warm", "Warm", saturation = 1.1f, warmth = 1f, builtIn = true),
-        Style("cool", "Cool", contrast = 1.05f, warmth = -1f, builtIn = true),
-        Style("punch", "Punch", saturation = 1.35f, contrast = 1.2f, builtIn = true)
-    )
+    private fun builtIns(): List<Style> {
+        val list = ArrayList<Style>()
+        list.add(Style("original", "Original", builtIn = true))
+        for (look in Looks.all) {
+            list.add(Style(look.id, look.name, look = look.id, builtIn = true))
+        }
+        return list
+    }
 
     private fun custom(): List<Style> {
         val json = prefs.getString("custom", "[]") ?: "[]"
@@ -80,12 +79,17 @@ class StyleStore(private val context: Context) {
         }
     }
 
-    /** Loads the LUT of a style, or null if the style has none. */
+    /** Loads the LUT of a style, or null for Original. Call this from the background thread. */
     fun loadLut(style: Style): CubeLut? {
-        val name = style.lutFile ?: return null
-        lutCache[name]?.let { return it }
-        val lut = File(lutDir(), name).inputStream().use { CubeLut.parse(it) }
-        lutCache[name] = lut
+        val key = style.look ?: style.lutFile ?: return null
+        lutCache[key]?.let { return it }
+        val lut = if (style.look != null) {
+            val look = Looks.find(style.look) ?: return null
+            Looks.buildLut(look.recipe)
+        } else {
+            File(lutDir(), style.lutFile!!).inputStream().use { CubeLut.parse(it) }
+        }
+        lutCache[key] = lut
         return lut
     }
 }

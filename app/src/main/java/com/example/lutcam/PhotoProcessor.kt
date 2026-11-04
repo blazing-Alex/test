@@ -17,7 +17,7 @@ object PhotoProcessor {
 
     private const val MAX_SIDE = 4096
 
-    /** Applies the style to the captured file and saves the result to Pictures/LutCam. */
+    /** Applies the look to the captured file and saves the result to Pictures/LutCam. */
     fun processAndSave(context: Context, file: File, style: Style, lut: CubeLut?): Uri {
         val resolver = context.contentResolver
         val stamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
@@ -34,11 +34,11 @@ object PhotoProcessor {
             val out = resolver.openOutputStream(uri)
                 ?: throw IllegalStateException("Could not open the photo file")
             out.use { stream ->
-                if (style.isIdentity && lut == null) {
+                if (lut == null) {
                     // "Original": keep the camera file as it is, full resolution.
                     file.inputStream().use { it.copyTo(stream) }
                 } else {
-                    val bitmap = render(file, style, lut)
+                    val bitmap = render(file, style.intensity, lut)
                     bitmap.compress(Bitmap.CompressFormat.JPEG, 95, stream)
                     bitmap.recycle()
                 }
@@ -53,7 +53,7 @@ object PhotoProcessor {
         return uri
     }
 
-    private fun render(file: File, style: Style, lut: CubeLut?): Bitmap {
+    private fun render(file: File, intensity: Float, lut: CubeLut): Bitmap {
         val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
         BitmapFactory.decodeFile(file.path, bounds)
 
@@ -67,26 +67,37 @@ object PhotoProcessor {
         val source = BitmapFactory.decodeFile(file.path, options)
             ?: throw IllegalStateException("Could not read the captured photo")
 
-        applyLook(source, style, lut)
+        applyLut(source, lut, intensity)
 
         val orientation = ExifInterface(file.path)
             .getAttributeInt(ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL)
-        val degrees = when (orientation) {
-            ExifInterface.ORIENTATION_ROTATE_90 -> 90f
-            ExifInterface.ORIENTATION_ROTATE_180 -> 180f
-            ExifInterface.ORIENTATION_ROTATE_270 -> 270f
-            else -> 0f
+        val matrix = Matrix()
+        when (orientation) {
+            ExifInterface.ORIENTATION_FLIP_HORIZONTAL -> matrix.setScale(-1f, 1f)
+            ExifInterface.ORIENTATION_ROTATE_180 -> matrix.setRotate(180f)
+            ExifInterface.ORIENTATION_FLIP_VERTICAL -> {
+                matrix.setRotate(180f)
+                matrix.postScale(-1f, 1f)
+            }
+            ExifInterface.ORIENTATION_TRANSPOSE -> {
+                matrix.setRotate(90f)
+                matrix.postScale(-1f, 1f)
+            }
+            ExifInterface.ORIENTATION_ROTATE_90 -> matrix.setRotate(90f)
+            ExifInterface.ORIENTATION_TRANSVERSE -> {
+                matrix.setRotate(-90f)
+                matrix.postScale(-1f, 1f)
+            }
+            ExifInterface.ORIENTATION_ROTATE_270 -> matrix.setRotate(-90f)
+            else -> return source
         }
-        if (degrees == 0f) return source
-
-        val matrix = Matrix().apply { postRotate(degrees) }
-        val rotated = Bitmap.createBitmap(source, 0, 0, source.width, source.height, matrix, true)
-        source.recycle()
-        return rotated
+        val result = Bitmap.createBitmap(source, 0, 0, source.width, source.height, matrix, true)
+        if (result !== source) source.recycle()
+        return result
     }
 
     /** Changes the pixels of the bitmap in place, a strip of rows at a time to save memory. */
-    private fun applyLook(bitmap: Bitmap, style: Style, lut: CubeLut?) {
+    fun applyLut(bitmap: Bitmap, lut: CubeLut, intensity: Float) {
         val width = bitmap.width
         val height = bitmap.height
         val stripRows = 128
@@ -101,34 +112,16 @@ object PhotoProcessor {
 
             for (i in 0 until width * rows) {
                 val p = pixels[i]
-                var r = ((p shr 16) and 255) / 255f
-                var g = ((p shr 8) and 255) / 255f
-                var b = (p and 255) / 255f
+                val r = ((p shr 16) and 255) / 255f
+                val g = ((p shr 8) and 255) / 255f
+                val b = (p and 255) / 255f
 
-                if (style.contrast != 1f) {
-                    r = (r - 0.5f) * style.contrast + 0.5f
-                    g = (g - 0.5f) * style.contrast + 0.5f
-                    b = (b - 0.5f) * style.contrast + 0.5f
-                }
-                if (style.saturation != 1f) {
-                    val luma = 0.299f * r + 0.587f * g + 0.114f * b
-                    r = luma + (r - luma) * style.saturation
-                    g = luma + (g - luma) * style.saturation
-                    b = luma + (b - luma) * style.saturation
-                }
-                if (style.warmth != 0f) {
-                    r += style.warmth * 0.05f
-                    b -= style.warmth * 0.05f
-                }
+                lut.apply(r, g, b, lutOut)
+                val nr = r + (lutOut[0] - r) * intensity
+                val ng = g + (lutOut[1] - g) * intensity
+                val nb = b + (lutOut[2] - b) * intensity
 
-                if (lut != null) {
-                    lut.apply(r, g, b, lutOut)
-                    r += (lutOut[0] - r) * style.intensity
-                    g += (lutOut[1] - g) * style.intensity
-                    b += (lutOut[2] - b) * style.intensity
-                }
-
-                pixels[i] = alpha or (to255(r) shl 16) or (to255(g) shl 8) or to255(b)
+                pixels[i] = alpha or (to255(nr) shl 16) or (to255(ng) shl 8) or to255(nb)
             }
 
             bitmap.setPixels(pixels, 0, width, 0, y, width, rows)

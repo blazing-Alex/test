@@ -61,8 +61,8 @@ class MainActivity : ComponentActivity() {
     private lateinit var chipScroll: HorizontalScrollView
     private lateinit var chipRow: LinearLayout
     private lateinit var styleLabel: DotTextView
-    private lateinit var statusLabel: DotTextView
-    private lateinit var modeText: DotTextView
+    private lateinit var captionText: TextView
+    private lateinit var modeText: TextView
     private lateinit var modePill: View
     private lateinit var shutter: ShutterView
     private lateinit var reticle: ReticleView
@@ -88,7 +88,12 @@ class MainActivity : ComponentActivity() {
     private val tiles = ArrayList<Tile>()
 
     private val worker = Executors.newSingleThreadExecutor()
-    private val clearStatus = Runnable { statusLabel.text = "" }
+    private val restoreCaption = Runnable { captionText.text = CAPTION }
+    private val mediumFont: Typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
+
+    private companion object {
+        const val CAPTION = "CAMERA PRESET"
+    }
 
     private val permissionLauncher =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
@@ -113,7 +118,7 @@ class MainActivity : ComponentActivity() {
         chipScroll = findViewById(R.id.chipScroll)
         chipRow = findViewById(R.id.chipRow)
         styleLabel = findViewById(R.id.styleLabel)
-        statusLabel = findViewById(R.id.statusLabel)
+        captionText = findViewById(R.id.captionText)
         modeText = findViewById(R.id.modeText)
         modePill = findViewById(R.id.modePill)
         shutter = findViewById(R.id.shutter)
@@ -130,21 +135,13 @@ class MainActivity : ComponentActivity() {
         }
         viewfinder.clipToOutline = true
 
-        // Dot-matrix texts.
+        // Dot-matrix lettering for the wordmark and the preset name.
         findViewById<DotTextView>(R.id.titleText).apply {
             pitch = dpf(3f)
             text = "LUT CAM"
         }
-        findViewById<DotTextView>(R.id.importText).apply {
-            pitch = dpf(2.6f)
-            text = "+ LUT"
-        }
-        styleLabel.pitch = dpf(4.5f)
+        styleLabel.pitch = dpf(3.6f)
         styleLabel.showUnlit = false
-        statusLabel.pitch = dpf(2.6f)
-        statusLabel.showUnlit = false
-        modeText.pitch = dpf(2.4f)
-        modeText.showUnlit = false
         modeText.text = modes[0].first
 
         // Swipe the viewfinder to change style, tap it to focus.
@@ -183,9 +180,6 @@ class MainActivity : ComponentActivity() {
                 updateModeLabel()
                 bindCamera()
             }
-        }
-        findViewById<View>(R.id.importButton).setOnClickListener {
-            lutPicker.launch(arrayOf("*/*"))
         }
         shutter.setOnClickListener { takePhoto() }
 
@@ -326,7 +320,7 @@ class MainActivity : ComponentActivity() {
                 try {
                     val lut = store.loadLut(style)
                     PhotoProcessor.processAndSave(this@MainActivity, temp, style, lut)
-                    runOnUiThread { showStatus("SAVED", 1500) }
+                    runOnUiThread { showStatus("SAVED", 1500L) }
                 } catch (e: Throwable) {
                     runOnUiThread { toast("Could not save the photo: ${e.message}") }
                 } finally {
@@ -349,17 +343,17 @@ class MainActivity : ComponentActivity() {
         shutter.busy = value
         statusDot.alpha = if (value) 1f else 0.4f
         if (value) {
-            showStatus("WAIT", 0)
-        } else if (statusLabel.text == "WAIT") {
-            statusLabel.text = ""
+            showStatus("SAVING", 0L)
+        } else if (captionText.text.toString() == "SAVING") {
+            captionText.text = CAPTION
         }
     }
 
-    /** Shows a short word in the viewfinder. holdMs = 0 keeps it until it is replaced. */
+    /** Shows a short word in the caption line. holdMs = 0 keeps it until it is replaced. */
     private fun showStatus(text: String, holdMs: Long) {
-        statusLabel.removeCallbacks(clearStatus)
-        statusLabel.text = text
-        if (holdMs > 0) statusLabel.postDelayed(clearStatus, holdMs)
+        captionText.removeCallbacks(restoreCaption)
+        captionText.text = text
+        if (holdMs > 0L) captionText.postDelayed(restoreCaption, holdMs)
     }
 
     // ---------------------------------------------------------------- styles
@@ -447,22 +441,15 @@ class MainActivity : ComponentActivity() {
             val swatch = SwatchView(this)
             swatch.filter = filterFor(style)
 
-            val label = TextView(this)
-            label.text = style.name.uppercase()
-            label.typeface = Typeface.MONOSPACE
-            label.textSize = 10f
-            label.letterSpacing = 0.08f
-            label.maxLines = 1
-            label.ellipsize = TextUtils.TruncateAt.END
-            label.gravity = Gravity.CENTER
+            val label = makeTileLabel(style.name)
 
             val root = LinearLayout(this)
             root.orientation = LinearLayout.VERTICAL
             root.gravity = Gravity.CENTER_HORIZONTAL
             root.setPadding(dp(6), dp(4), dp(6), dp(4))
-            root.addView(swatch, LinearLayout.LayoutParams(dp(56), dp(56)))
+            root.addView(swatch, LinearLayout.LayoutParams(dp(52), dp(52)))
             val labelParams = LinearLayout.LayoutParams(dp(64), LinearLayout.LayoutParams.WRAP_CONTENT)
-            labelParams.topMargin = dp(4)
+            labelParams.topMargin = dp(8)
             root.addView(label, labelParams)
             root.setOnClickListener { selectStyle(style) }
             if (!style.builtIn) {
@@ -475,7 +462,39 @@ class MainActivity : ComponentActivity() {
             chipRow.addView(root)
             tiles.add(Tile(root, swatch, label, style))
         }
+
+        // The last tile adds a new LUT.
+        val addSwatch = SwatchView(this)
+        addSwatch.isAdd = true
+        val addLabel = makeTileLabel("Add LUT")
+        addLabel.setTextColor(ContextCompat.getColor(this, R.color.text_secondary))
+        val addRoot = LinearLayout(this)
+        addRoot.orientation = LinearLayout.VERTICAL
+        addRoot.gravity = Gravity.CENTER_HORIZONTAL
+        addRoot.setPadding(dp(6), dp(4), dp(6), dp(4))
+        addRoot.addView(addSwatch, LinearLayout.LayoutParams(dp(52), dp(52)))
+        val addLabelParams = LinearLayout.LayoutParams(dp(64), LinearLayout.LayoutParams.WRAP_CONTENT)
+        addLabelParams.topMargin = dp(8)
+        addRoot.addView(addLabel, addLabelParams)
+        addRoot.contentDescription = "Add a LUT"
+        addRoot.setOnClickListener { lutPicker.launch(arrayOf("*/*")) }
+        chipRow.addView(addRoot)
+
         updateSelection(false)
+    }
+
+    private fun makeTileLabel(name: String): TextView {
+        val label = TextView(this)
+        label.text = name.uppercase()
+        label.typeface = mediumFont
+        label.textSize = 11f
+        label.letterSpacing = 0.06f
+        label.includeFontPadding = false
+        label.maxLines = 1
+        label.ellipsize = TextUtils.TruncateAt.END
+        label.gravity = Gravity.CENTER
+        label.setTextColor(ContextCompat.getColor(this, R.color.text_secondary))
+        return label
     }
 
     private fun updateSelection(scroll: Boolean) {
@@ -483,7 +502,9 @@ class MainActivity : ComponentActivity() {
         for (tile in tiles) {
             val active = tile.style.id == selected?.id
             tile.swatch.active = active
-            tile.label.setTextColor(if (active) Color.WHITE else 0xFF777777.toInt())
+            tile.label.setTextColor(
+                ContextCompat.getColor(this, if (active) R.color.text_primary else R.color.text_secondary)
+            )
             if (active) activeTile = tile
         }
         if (scroll && activeTile != null) {
